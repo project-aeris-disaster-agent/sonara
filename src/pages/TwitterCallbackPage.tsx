@@ -202,12 +202,10 @@ export function TwitterCallbackPage() {
 
         // Exchange code for tokens via Supabase Edge Function
         // The Edge Function also fetches user profile (avoids CORS issues)
-        // Clean the redirect URI (remove quotes and whitespace)
-        const rawRedirectUri = import.meta.env.VITE_TWITTER_REDIRECT_URI;
-        const cleanedRedirectUri = rawRedirectUri 
-          ? rawRedirectUri.trim().replace(/^["']|["']$/g, '').trim()
-          : undefined;
-        const redirectUri = cleanedRedirectUri || `${window.location.origin}/auth/twitter/callback`;
+        // IMPORTANT: Use the same redirect URI from the OAuth service to ensure exact match
+        // This prevents "redirect URI mismatch" errors from Twitter
+        const redirectUri = oauthService.getRedirectUri();
+        console.log('🔗 Using redirect URI from OAuth service:', redirectUri);
         const tokenData = await exchangeCodeForTokens(code, codeVerifier, redirectUri);
         
         // Check for error from Edge Function

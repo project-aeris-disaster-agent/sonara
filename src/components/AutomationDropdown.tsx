@@ -12,6 +12,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { useNotifications } from '@/contexts/NotificationContext';
+import { ShinyButton } from '@/components/ShinyButton';
 
 // Custom icons matching HomePage
 const FarcasterIcon = ({ className }: { className?: string }) => (
@@ -97,12 +98,7 @@ export function AutomationDropdown({
     }
   }, [isOpen]);
 
-  // Auto-generate post when dropdown opens
-  useEffect(() => {
-    if (isOpen && characterCard && sessionId && !recommendedPost && !isGenerating) {
-      handleGeneratePost();
-    }
-  }, [isOpen, characterCard, sessionId]);
+  // Auto-generation disabled - user must click "Generate Post" button manually
 
   // Sync editable content and tags with the latest generated post
   useEffect(() => {
@@ -750,13 +746,9 @@ export function AutomationDropdown({
                     </div>
                   ) : (
                     <div className="bg-gradient-to-br from-black/60 to-black/40 rounded-lg p-4 text-center border-2 border-yellow-500/20">
-                      <p className="text-yellow-400/70 text-xs mb-3">Ready to generate your premium post</p>
-                      <button
-                        onClick={handleGeneratePost}
-                        className="px-4 py-2 bg-gradient-to-r from-yellow-600/80 to-orange-500/80 hover:from-yellow-600 hover:to-orange-500 rounded-lg text-white text-xs font-bold hover:scale-105 transition-transform border border-yellow-500/30"
-                      >
+                      <ShinyButton onClick={handleGeneratePost}>
                         Generate Post
-                      </button>
+                      </ShinyButton>
                     </div>
                   )}
 

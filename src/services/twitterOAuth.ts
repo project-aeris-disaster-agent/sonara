@@ -33,6 +33,14 @@ export class TwitterOAuthService {
   }
 
   /**
+   * Get the configured redirect URI
+   * This ensures consistency between authorization and token exchange
+   */
+  getRedirectUri(): string {
+    return this.config.redirectUri;
+  }
+
+  /**
    * Generate PKCE code verifier and challenge
    */
   async generatePKCE(): Promise<{ codeVerifier: string; codeChallenge: string }> {
@@ -286,7 +294,18 @@ export function getTwitterOAuthService(): TwitterOAuthService {
     const rawScopes = import.meta.env.VITE_TWITTER_SCOPES;
 
     const clientId = cleanEnvValue(rawClientId);
-    const redirectUri = cleanEnvValue(rawRedirectUri) || `${window.location.origin}/auth/twitter/callback`;
+    
+    // In development, always use the current origin (localhost) for redirect URI
+    // In production, use the environment variable if set, otherwise fall back to current origin
+    let redirectUri: string;
+    if (import.meta.env.DEV) {
+      // Development mode: always use local origin
+      redirectUri = `${window.location.origin}/auth/twitter/callback`;
+      console.log('🔧 Development mode detected - using local redirect URI:', redirectUri);
+    } else {
+      // Production mode: use env var if set, otherwise current origin
+      redirectUri = cleanEnvValue(rawRedirectUri) || `${window.location.origin}/auth/twitter/callback`;
+    }
     
     // Parse and clean scopes
     let envScopes: string[] = [];
