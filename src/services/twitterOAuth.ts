@@ -112,10 +112,29 @@ export class TwitterOAuthService {
 
     // Store code verifier and state in localStorage for better persistence across redirects
     // Also store timestamp to allow cleanup of old entries
+    // Use both localStorage and sessionStorage for redundancy
     const timestamp = Date.now().toString();
-    localStorage.setItem('twitter_code_verifier', codeVerifier);
-    localStorage.setItem('twitter_state', state);
-    localStorage.setItem('twitter_oauth_timestamp', timestamp);
+    try {
+      localStorage.setItem('twitter_code_verifier', codeVerifier);
+      localStorage.setItem('twitter_state', state);
+      localStorage.setItem('twitter_oauth_timestamp', timestamp);
+      // Also store in sessionStorage as backup
+      sessionStorage.setItem('twitter_code_verifier', codeVerifier);
+      sessionStorage.setItem('twitter_state', state);
+      sessionStorage.setItem('twitter_oauth_timestamp', timestamp);
+    } catch (e) {
+      console.error('❌ Failed to store OAuth state in localStorage:', e);
+      // Fallback to sessionStorage only
+      try {
+        sessionStorage.setItem('twitter_code_verifier', codeVerifier);
+        sessionStorage.setItem('twitter_state', state);
+        sessionStorage.setItem('twitter_oauth_timestamp', timestamp);
+        console.warn('⚠️ Using sessionStorage only for OAuth state (localStorage unavailable)');
+      } catch (e2) {
+        console.error('❌ Failed to store OAuth state in sessionStorage:', e2);
+        throw new Error('Failed to store OAuth state. Please check your browser settings.');
+      }
+    }
     
     // Store active flow in sessionStorage (cleared on tab close, more reliable on mobile)
     sessionStorage.setItem('twitter_oauth_active_flow', flowId);
@@ -179,11 +198,27 @@ export class TwitterOAuthService {
   }
 
   /**
-   * Get stored code verifier from localStorage
+   * Get stored code verifier from localStorage (with sessionStorage fallback)
    */
   getStoredCodeVerifier(): string | null {
-    const verifier = localStorage.getItem('twitter_code_verifier');
-    const timestamp = localStorage.getItem('twitter_oauth_timestamp');
+    let verifier: string | null = null;
+    let timestamp: string | null = null;
+    
+    try {
+      verifier = localStorage.getItem('twitter_code_verifier');
+      timestamp = localStorage.getItem('twitter_oauth_timestamp');
+    } catch (e) {
+      console.error('❌ Failed to access localStorage:', e);
+      // Try sessionStorage as fallback
+      try {
+        verifier = sessionStorage.getItem('twitter_code_verifier');
+        timestamp = sessionStorage.getItem('twitter_oauth_timestamp');
+        console.log('⚠️ Using sessionStorage as fallback for code verifier');
+      } catch (e2) {
+        console.error('❌ Failed to access sessionStorage:', e2);
+        return null;
+      }
+    }
     
     // Clean up if older than 10 minutes (OAuth flows should complete quickly)
     if (timestamp && verifier) {
@@ -202,8 +237,24 @@ export class TwitterOAuthService {
    * Get stored state from localStorage
    */
   getStoredState(): string | null {
-    const state = localStorage.getItem('twitter_state');
-    const timestamp = localStorage.getItem('twitter_oauth_timestamp');
+    let state: string | null = null;
+    let timestamp: string | null = null;
+    
+    try {
+      state = localStorage.getItem('twitter_state');
+      timestamp = localStorage.getItem('twitter_oauth_timestamp');
+    } catch (e) {
+      console.error('❌ Failed to access localStorage:', e);
+      // Try sessionStorage as fallback
+      try {
+        state = sessionStorage.getItem('twitter_state');
+        timestamp = sessionStorage.getItem('twitter_oauth_timestamp');
+        console.log('⚠️ Using sessionStorage as fallback for state');
+      } catch (e2) {
+        console.error('❌ Failed to access sessionStorage:', e2);
+        return null;
+      }
+    }
     
     // Clean up if older than 10 minutes
     if (timestamp && state) {
@@ -222,6 +273,7 @@ export class TwitterOAuthService {
       timestamp,
       age: timestamp ? `${Math.round((Date.now() - parseInt(timestamp, 10)) / 1000)}s` : 'unknown',
       origin: typeof window !== 'undefined' ? window.location.origin : 'unknown',
+      storageType: state ? (localStorage.getItem('twitter_state') ? 'localStorage' : 'sessionStorage') : 'none',
     });
     
     return state;
@@ -231,17 +283,29 @@ export class TwitterOAuthService {
    * Clear stored OAuth data
    */
   clearStoredData(): void {
-    localStorage.removeItem('twitter_code_verifier');
-    localStorage.removeItem('twitter_state');
-    localStorage.removeItem('twitter_oauth_timestamp');
-    // Also clear sessionStorage flow tracking
-    sessionStorage.removeItem('twitter_oauth_active_flow');
-    sessionStorage.removeItem('twitter_oauth_active_flow_timestamp');
-    // Clear redirect loop tracking
-    sessionStorage.removeItem('twitter_callback_redirect_count');
-    sessionStorage.removeItem('twitter_callback_redirect_timestamp');
-    // Clear last known Twitter user (for account switching detection)
-    sessionStorage.removeItem('sona_last_twitter_user');
+    try {
+      localStorage.removeItem('twitter_code_verifier');
+      localStorage.removeItem('twitter_state');
+      localStorage.removeItem('twitter_oauth_timestamp');
+    } catch (e) {
+      console.warn('⚠️ Failed to clear localStorage:', e);
+    }
+    
+    try {
+      sessionStorage.removeItem('twitter_code_verifier');
+      sessionStorage.removeItem('twitter_state');
+      sessionStorage.removeItem('twitter_oauth_timestamp');
+      // Also clear sessionStorage flow tracking
+      sessionStorage.removeItem('twitter_oauth_active_flow');
+      sessionStorage.removeItem('twitter_oauth_active_flow_timestamp');
+      // Clear redirect loop tracking
+      sessionStorage.removeItem('twitter_callback_redirect_count');
+      sessionStorage.removeItem('twitter_callback_redirect_timestamp');
+      // Clear last known Twitter user (for account switching detection)
+      sessionStorage.removeItem('sona_last_twitter_user');
+    } catch (e) {
+      console.warn('⚠️ Failed to clear sessionStorage:', e);
+    }
   }
 
   /**
@@ -304,7 +368,24 @@ export function getTwitterOAuthService(): TwitterOAuthService {
       console.log('🔧 Development mode detected - using local redirect URI:', redirectUri);
     } else {
       // Production mode: use env var if set, otherwise current origin
-      redirectUri = cleanEnvValue(rawRedirectUri) || `${window.location.origin}/auth/twitter/callback`;
+      const cleanedEnvRedirectUri = cleanEnvValue(rawRedirectUri);
+      redirectUri = cleanedEnvRedirectUri || `${window.location.origin}/auth/twitter/callback`;
+      
+      // Enhanced logging for production debugging
+      console.log('🔧 Production mode - redirect URI resolution:', {
+        hasEnvVar: !!rawRedirectUri,
+        rawEnvValue: rawRedirectUri ? rawRedirectUri.substring(0, 50) + '...' : null,
+        cleanedEnvValue: cleanedEnvRedirectUri,
+        currentOrigin: window.location.origin,
+        finalRedirectUri: redirectUri,
+        envVarLength: rawRedirectUri?.length || 0,
+      });
+      
+      // Warn if using fallback (env var not set)
+      if (!cleanedEnvRedirectUri) {
+        console.warn('⚠️ VITE_TWITTER_REDIRECT_URI not set in production! Using fallback:', redirectUri);
+        console.warn('⚠️ This may cause OAuth failures if the fallback URI is not registered in Twitter Developer Portal.');
+      }
     }
     
     // Parse and clean scopes

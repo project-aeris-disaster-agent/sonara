@@ -144,6 +144,8 @@ export function TwitterCallbackPage() {
           hasStoredState: !!storedState,
           origin: window.location.origin,
           fullUrl: window.location.href,
+          localStorageAvailable: typeof Storage !== 'undefined',
+          localStorageKeys: typeof Storage !== 'undefined' ? Object.keys(localStorage).filter(k => k.includes('twitter')) : [],
         });
         
         if (!state) {
