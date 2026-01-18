@@ -43,6 +43,10 @@ export function TwitterCallbackPage() {
   };
 
   useEffect(() => {
+    // #region agent log
+    console.log('[DEBUG-H3,H5] TwitterCallbackPage:useEffect:entry', {hasCode:!!searchParams.get('code'),hasError:!!searchParams.get('error'),hasProcessed:hasProcessedRef.current,isProcessing:isProcessingRef.current,urlPrefix:window.location.href.substring(0,120)});
+    // #endregion
+    
     // Early validation - if we don't have code or error, don't process
     const code = searchParams.get('code');
     const error = searchParams.get('error');
@@ -57,13 +61,24 @@ export function TwitterCallbackPage() {
     const redirectCount = sessionStorage.getItem('twitter_callback_redirect_count');
     const redirectTimestamp = sessionStorage.getItem('twitter_callback_redirect_timestamp');
     
+    // #region agent log
+    console.log('[DEBUG-H6,H8] redirectLoopCheck', {redirectCount, redirectTimestamp, now: Date.now()});
+    // #endregion
+    
     if (redirectCount && redirectTimestamp) {
       const age = Date.now() - parseInt(redirectTimestamp, 10);
       const count = parseInt(redirectCount, 10);
       
+      // #region agent log
+      console.log('[DEBUG-H6,H8] redirectLoopCheck:eval', {count, age, willBlock: count >= 3 && age < 5000});
+      // #endregion
+      
       // If we've been redirected here 3+ times in less than 5 seconds, we're in a loop
       if (count >= 3 && age < 5000) {
         console.error('❌ Redirect loop detected! Clearing OAuth state.');
+        // #region agent log
+        console.log('[DEBUG-H6,H8] LOOP_DETECTED', {count, age});
+        // #endregion
         const oauthService = getTwitterOAuthService();
         oauthService.clearStoredData();
         sessionStorage.removeItem('twitter_callback_redirect_count');

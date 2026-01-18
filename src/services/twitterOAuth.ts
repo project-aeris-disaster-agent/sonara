@@ -82,6 +82,10 @@ export class TwitterOAuthService {
   }> {
     const { forceVerify = false } = options || {};
     
+    // #region agent log
+    console.log('[DEBUG-H1,H2] getAuthorizationUrl:entry', {forceVerify,calledAt:Date.now()});
+    // #endregion
+    
     // If forceVerify is true, clear all stored OAuth data first
     if (forceVerify) {
       console.log('🔄 Force verify enabled - clearing all OAuth state for account switch');
@@ -93,6 +97,9 @@ export class TwitterOAuthService {
     
     if (activeFlowId && activeFlowTimestamp) {
       const age = Date.now() - parseInt(activeFlowTimestamp, 10);
+      // #region agent log
+      console.log('[DEBUG-H2] activeFlowCheck', {activeFlowId,age,willBlock:age<30000});
+      // #endregion
       // If flow is less than 30 seconds old, prevent starting a new one
       if (age < 30000) {
         console.warn('⚠️ Active OAuth flow detected, preventing duplicate initiation');
@@ -179,6 +186,10 @@ export class TwitterOAuthService {
     });
 
     const url = `https://twitter.com/i/oauth2/authorize?${params.toString()}`;
+    
+    // #region agent log
+    console.log('[DEBUG-H1,H5] urlGenerated', {statePrefix:state.substring(0,10),redirectUri:this.config.redirectUri,urlLength:url.length});
+    // #endregion
     
     // Log the exact redirect URI being used for debugging
     console.log('🔗 Twitter OAuth URL generated:', {
@@ -283,6 +294,17 @@ export class TwitterOAuthService {
    * Clear stored OAuth data
    */
   clearStoredData(): void {
+    // #region agent log
+    const beforeClear = {
+      ls_verifier: !!localStorage.getItem('twitter_code_verifier'),
+      ls_state: localStorage.getItem('twitter_state')?.substring(0,10),
+      ss_verifier: !!sessionStorage.getItem('twitter_code_verifier'),
+      ss_state: sessionStorage.getItem('twitter_state')?.substring(0,10),
+      ss_activeFlow: sessionStorage.getItem('twitter_oauth_active_flow'),
+    };
+    console.log('[DEBUG-H7,H9] clearStoredData:before', beforeClear);
+    // #endregion
+    
     try {
       localStorage.removeItem('twitter_code_verifier');
       localStorage.removeItem('twitter_state');
@@ -306,6 +328,17 @@ export class TwitterOAuthService {
     } catch (e) {
       console.warn('⚠️ Failed to clear sessionStorage:', e);
     }
+    
+    // #region agent log
+    const afterClear = {
+      ls_verifier: !!localStorage.getItem('twitter_code_verifier'),
+      ls_state: localStorage.getItem('twitter_state')?.substring(0,10),
+      ss_verifier: !!sessionStorage.getItem('twitter_code_verifier'),
+      ss_state: sessionStorage.getItem('twitter_state')?.substring(0,10),
+      ss_activeFlow: sessionStorage.getItem('twitter_oauth_active_flow'),
+    };
+    console.log('[DEBUG-H7,H9] clearStoredData:after', afterClear);
+    // #endregion
   }
 
   /**

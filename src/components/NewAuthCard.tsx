@@ -122,9 +122,16 @@ export function NewAuthCard({ onSuccess }: NewAuthCardProps) {
   };
 
   const handleTwitterSignIn = async (forceSwitch: boolean = false) => {
+    // #region agent log
+    console.log('[DEBUG-H1] handleTwitterSignIn:entry', {forceSwitch,isTwitterLoading,pathname:window.location.pathname,calledAt:Date.now()});
+    // #endregion
+    
     // Prevent multiple clicks/rapid fire
     if (isTwitterLoading) {
       console.log('Twitter OAuth already in progress, ignoring click');
+      // #region agent log
+      console.log('[DEBUG-H1] handleTwitterSignIn:blocked', {isTwitterLoading});
+      // #endregion
       return;
     }
 
@@ -138,9 +145,17 @@ export function NewAuthCard({ onSuccess }: NewAuthCardProps) {
       setIsTwitterLoading(true);
       const oauthService = getTwitterOAuthService();
       
+      // #region agent log
+      console.log('[DEBUG-H7,H9] handleTwitterSignIn:beforeClear', {timestamp: Date.now()});
+      // #endregion
+      
       // Always clear existing OAuth state before starting a new flow
       // This prevents stale state issues when switching accounts
       oauthService.clearStoredData();
+      
+      // #region agent log
+      console.log('[DEBUG-H7,H9] handleTwitterSignIn:afterClear', {timestamp: Date.now()});
+      // #endregion
       
       // If forceSwitch is true, use the account switch URL
       // This clears all state and prepares for a fresh OAuth flow
@@ -157,6 +172,10 @@ export function NewAuthCard({ onSuccess }: NewAuthCardProps) {
       
       // Small delay to ensure state is saved before redirect
       await new Promise(resolve => setTimeout(resolve, 150));
+      
+      // #region agent log
+      console.log('[DEBUG-H1,H4] handleTwitterSignIn:redirect', {urlPrefix:url.substring(0,80),timestamp:Date.now()});
+      // #endregion
       
       // Use replace() instead of href to prevent back button issues and potential loops on mobile
       // This also prevents the page from being added to browser history

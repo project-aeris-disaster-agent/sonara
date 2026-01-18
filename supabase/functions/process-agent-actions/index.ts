@@ -995,9 +995,13 @@ async function processUserAgentActions(
   user: UserWithAgentSettings
 ): Promise<ProcessResult> {
   const settings = user.agent_settings;
+  
+  // Enhanced logging for debugging user processing
+  console.log(`[${user.id}] Processing: enabled=${settings.enabled}, lastRunAt=${settings.lastRunAt}, targets=${settings.targetAccounts.length}, actions=${JSON.stringify(settings.actions)}`);
 
   // Check if it's time to run
   if (!shouldRunAgent(settings)) {
+    console.log(`[${user.id}] Skipped: Not time to run (lastRunAt=${settings.lastRunAt}, frequency=${settings.frequency})`);
     return {
       userId: user.id,
       status: 'skipped',
@@ -1315,22 +1319,12 @@ async function processUserAgentActions(
       await delay(getJitteredDelay(ACCOUNT_DELAY_MS, ACCOUNT_DELAY_JITTER_MS));
     }
 
-    if (cacheDirty || nextCursor !== cursor) {
-      await supabaseAdmin
-        .from('profiles')
-        .update({
-          agent_settings: {
-            ...settings,
-            targetAccountCursor: nextCursor,
-            targetAccountIdCache: targetIdCache,
-          },
-        })
-        .eq('id', user.id);
-    }
-
-    // Update lastRunAt
+    // CRITICAL: Single atomic update to avoid race condition where cache/cursor
+    // updates get overwritten by a separate lastRunAt update
     const updatedSettings: AgentSettings = {
       ...settings,
+      targetAccountCursor: nextCursor,
+      targetAccountIdCache: targetIdCache,
       lastRunAt: new Date().toISOString(),
     };
 
@@ -1338,6 +1332,8 @@ async function processUserAgentActions(
       .from('profiles')
       .update({ agent_settings: updatedSettings })
       .eq('id', user.id);
+    
+    console.log(`[${user.id}] Updated agent_settings: cursor=${nextCursor}, actions=${totalActionsScheduled}, lastRunAt=${updatedSettings.lastRunAt}`);
 
     return {
       userId: user.id,
@@ -1345,12 +1341,30 @@ async function processUserAgentActions(
       actionsScheduled: totalActionsScheduled,
     };
   } catch (error) {
-    console.error(`Error processing agent actions for user ${user.id}:`, error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`[${user.id}] Error processing agent actions:`, errorMessage);
+    
+    // Still update lastRunAt on error to prevent infinite retry loops
+    // This ensures we don't hammer the API on the next cron run
+    try {
+      const failedSettings: AgentSettings = {
+        ...settings,
+        lastRunAt: new Date().toISOString(),
+      };
+      await supabaseAdmin
+        .from('profiles')
+        .update({ agent_settings: failedSettings })
+        .eq('id', user.id);
+      console.log(`[${user.id}] Updated lastRunAt after error to prevent retry loop`);
+    } catch (updateError) {
+      console.error(`[${user.id}] Failed to update lastRunAt after error:`, updateError);
+    }
+    
     return {
       userId: user.id,
       status: 'failed',
       actionsScheduled: 0,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: errorMessage,
     };
   }
 }
