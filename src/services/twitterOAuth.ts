@@ -346,8 +346,12 @@ let twitterOAuthInstance: TwitterOAuthService | null = null;
 function cleanEnvValue(value: string | undefined): string | undefined {
   if (!value || typeof value !== 'string') return undefined;
   // Remove quotes (both single and double) from start and end
-  // Remove any whitespace/newlines
-  return value.trim().replace(/^["']|["']$/g, '').trim();
+  // Remove any whitespace/newlines including \r\n characters
+  return value
+    .trim()
+    .replace(/[\r\n]+/g, '')  // Remove carriage returns and newlines
+    .replace(/^["']|["']$/g, '')  // Remove surrounding quotes
+    .trim();
 }
 
 export function getTwitterOAuthService(): TwitterOAuthService {
