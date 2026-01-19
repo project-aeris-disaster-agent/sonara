@@ -10,6 +10,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const CHARACTER_CARD_CACHE_TTL_HOURS = 24 * 7;
+
+function getCharacterCardCacheTtlHours(): number {
+  const raw = Deno.env.get('CHARACTER_CARD_CACHE_TTL_HOURS');
+  if (!raw) return CHARACTER_CARD_CACHE_TTL_HOURS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    console.warn('Invalid CHARACTER_CARD_CACHE_TTL_HOURS, using default');
+    return CHARACTER_CARD_CACHE_TTL_HOURS;
+  }
+  return parsed;
+}
+
 interface TwitterTweet {
   id: string;
   text: string;
@@ -1020,13 +1033,6 @@ serve(async (req) => {
       );
     }
 
-    // Rate limiting - 3 character card generations per hour per user
-    const rateLimitResult = checkRateLimit(user_id, RATE_LIMITS.characterCard);
-    if (!rateLimitResult.allowed) {
-      console.warn(`Rate limit exceeded for user ${user_id}: char-card`);
-      return rateLimitResponse(rateLimitResult, corsHeaders);
-    }
-
     // Get environment variables
     const grokApiKey = Deno.env.get('GROK_API_KEY');
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -1055,7 +1061,7 @@ serve(async (req) => {
 
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('twitter_username, twitter_user_id, twitter_access_token, full_name, profile_photo_url')
+      .select('twitter_username, twitter_user_id, twitter_access_token, full_name, profile_photo_url, character_card_generated_at')
       .eq('id', user_id)
       .maybeSingle();
 
@@ -1064,6 +1070,67 @@ serve(async (req) => {
         JSON.stringify({ error: 'User profile not found. Please connect Twitter account first.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    const { data: cachedCard } = await supabaseAdmin
+      .from('character_cards')
+      .select('card_data, generation_metadata, created_at, version')
+      .eq('user_id', user_id)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (cachedCard?.created_at) {
+      const cachedAtMs = new Date(cachedCard.created_at).getTime();
+      const ageHours = (Date.now() - cachedAtMs) / (1000 * 60 * 60);
+      const ttlHours = getCharacterCardCacheTtlHours();
+      if (!Number.isNaN(ageHours) && ageHours <= ttlHours) {
+        const metadata = cachedCard.generation_metadata || {};
+        const twitterMetrics = metadata.twitter_metrics || {};
+        const profileScores = metadata.profile_scores || {
+          finalRating: 'C',
+          engagement: 'C',
+          reach: 'C',
+          content: 'C',
+        };
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            character_card: cachedCard.card_data,
+            twitter_profile: {
+              id: profile.twitter_user_id || twitter_user_id || 'unknown',
+              username: profile.twitter_username || metadata.twitter_username || 'unknown',
+              name: profile.full_name || profile.twitter_username || 'User',
+              profile_image_url: profile.profile_photo_url || undefined,
+              followers_count: twitterMetrics.followers_count,
+              following_count: twitterMetrics.following_count,
+              tweet_count: twitterMetrics.tweet_count,
+              listed_count: twitterMetrics.listed_count,
+            },
+            profile_scores: profileScores,
+            analysis_metadata: {
+              method: 'cache',
+              tweets_analyzed: metadata.tweets_analyzed || 0,
+              generated_at: metadata.generated_at || cachedCard.created_at,
+              signaturePhrases: metadata.signaturePhrases,
+              emojiPatterns: metadata.emojiPatterns,
+              humorStyle: metadata.humorStyle,
+              vocabularyLevel: metadata.vocabularyLevel,
+              analysis_summary: metadata.analysis_summary,
+            },
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    // Rate limiting - 3 character card generations per hour per user
+    const rateLimitResult = checkRateLimit(user_id, RATE_LIMITS.characterCard);
+    if (!rateLimitResult.allowed) {
+      console.warn(`Rate limit exceeded for user ${user_id}: char-card`);
+      return rateLimitResponse(rateLimitResult, corsHeaders);
     }
 
     // Use provided access_token or fall back to stored one

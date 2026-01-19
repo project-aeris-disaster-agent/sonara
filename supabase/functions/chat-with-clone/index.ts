@@ -36,6 +36,7 @@ interface ChatRequest {
   conversation_history: ConversationMessage[];
   personality_metadata?: PersonalityMetadata;
   conversation_context?: ConversationContext;
+  dry_run?: boolean;
 }
 
 // Main handler
@@ -46,7 +47,24 @@ serve(async (req) => {
   }
 
   try {
-    const { user_id, session_id, message, character_card, conversation_history, personality_metadata, conversation_context } = await req.json() as ChatRequest;
+    const {
+      user_id,
+      session_id,
+      message,
+      character_card,
+      conversation_history,
+      personality_metadata,
+      conversation_context,
+      dry_run = false,
+    } = await req.json() as ChatRequest;
+
+    if (dry_run) {
+      const grokConfigured = !!Deno.env.get('GROK_API_KEY');
+      return new Response(
+        JSON.stringify({ success: true, dry_run: true, grok_configured: grokConfigured }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Validate required fields
     if (!user_id || !message || !character_card) {

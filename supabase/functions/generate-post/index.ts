@@ -242,7 +242,7 @@ Return ONLY the post text, nothing else.`;
           'Authorization': `Bearer ${grokApiKey}`,
         },
         body: JSON.stringify({
-          model: 'grok-4-latest',
+          model: 'grok-3-latest',
           messages: [
             {
               role: 'system',
@@ -256,7 +256,7 @@ Return ONLY the post text, nothing else.`;
             },
           ],
           temperature,
-          max_tokens: 150,
+          max_tokens: 120,
         }),
       });
 

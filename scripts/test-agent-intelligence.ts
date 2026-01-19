@@ -383,17 +383,35 @@ async function testGenericPhraseDetection() {
 async function testLiveSearchConfiguration() {
   console.log('\n🔍 Testing Live Search Configuration...\n');
 
-  // Read the actual implementation to verify live search is enabled
+  // Read the actual implementation to verify live search is gated by detectKnowledgeQuery
   try {
     const processAgentActionsPath = path.join(__dirname, '..', 'supabase', 'functions', 'process-agent-actions', 'index.ts');
-    const fileContent = fs.readFileSync(processAgentActionsPath, 'utf-8');
+    const processAgentContent = fs.readFileSync(processAgentActionsPath, 'utf-8');
     
-    // Check if enableLiveSearch: true is present
-    const hasLiveSearchEnabled = fileContent.includes('enableLiveSearch: true');
+    // Check that forced enableLiveSearch: true is NOT present (cost optimization)
+    const hasForcedLiveSearch = processAgentContent.includes('enableLiveSearch: true');
     logTest(
-      'Live Search Enabled in process-agent-actions',
-      hasLiveSearchEnabled,
-      hasLiveSearchEnabled ? 'Live search is enabled for agent replies' : 'Live search not found in code'
+      'Live Search NOT Forced in process-agent-actions',
+      !hasForcedLiveSearch,
+      !hasForcedLiveSearch 
+        ? 'Live search is gated by detectKnowledgeQuery (cost-optimized)' 
+        : 'Live search is still forced on (not cost-optimized)'
+    );
+
+    // Check that generateResponse.ts uses detectKnowledgeQuery for live search gating
+    const generateResponsePath = path.join(__dirname, '..', 'supabase', 'functions', '_shared', 'generateResponse.ts');
+    const generateResponseContent = fs.readFileSync(generateResponsePath, 'utf-8');
+    
+    const hasDetectKnowledgeQuery = generateResponseContent.includes('detectKnowledgeQuery');
+    const hasGatedLiveSearch = generateResponseContent.includes('queryNeedsLiveSearch') && 
+                               generateResponseContent.includes('needsLiveSearch');
+    
+    logTest(
+      'Live Search Gated by detectKnowledgeQuery',
+      hasDetectKnowledgeQuery && hasGatedLiveSearch,
+      hasDetectKnowledgeQuery && hasGatedLiveSearch
+        ? 'Live search only triggers for knowledge queries'
+        : 'Live search gating not found in generateResponse.ts'
     );
 
     logTest(

@@ -482,18 +482,55 @@ export interface ReplyDecision {
  * Prevents generic/empty replies by evaluating value potential
  */
 // Keywords that indicate a query needs real-time information
+// These trigger Grok's live search for Twitter knowledge and web data
 const KNOWLEDGE_QUERY_KEYWORDS = [
-  // Twitter/social sentiment
+  // ===== SOCIAL SENTIMENT =====
   'what does twitter think',
+  'what does x think',
   'what are people saying',
   'twitter sentiment',
   'what is twitter saying',
   'trending on twitter',
+  'trending on x',
   'twitter reactions',
   'public opinion',
   'what do people think',
-  // Current events
+  'community reaction',
+  'how do fans feel',
+  'sentiment about',
+  'opinions on',
+  'thoughts on',
+  'reaction to',
+  'backlash',
+  'controversy',
+  'drama about',
+  'discourse',
+  'hot take',
+  'takes on',
+  'debate about',
+  'are people mad',
+  'are people happy',
+  'what is everyone saying',
+  
+  // ===== TRENDING TOPICS =====
   'trending',
+  'viral',
+  'blowing up',
+  'going viral',
+  'is trending',
+  'top trending',
+  'what is trending',
+  'why is trending',
+  'trending topic',
+  'trending hashtag',
+  'popular right now',
+  'everyone talking about',
+  'all over twitter',
+  'all over x',
+  'timeline is',
+  'my feed is',
+  
+  // ===== NEWS & CURRENT AFFAIRS =====
   'current',
   'latest',
   'recent',
@@ -503,22 +540,88 @@ const KNOWLEDGE_QUERY_KEYWORDS = [
   'upcoming',
   'this week',
   'tonight',
-  // Sports/events
+  'yesterday',
+  'just announced',
+  'breaking news',
+  'breaking',
+  'news about',
+  'update on',
+  'what happened',
+  'did you hear',
+  'have you seen',
+  'just dropped',
+  'just released',
+  'announcement',
+  'announced',
+  'confirmed',
+  'reportedly',
+  'according to',
+  'sources say',
+  'rumor',
+  'rumors',
+  'leak',
+  'leaked',
+  
+  // ===== POLITICS & WORLD EVENTS =====
+  'election',
+  'politics',
+  'political',
+  'congress',
+  'senate',
+  'president',
+  'legislation',
+  'policy',
+  'government',
+  'war in',
+  'conflict in',
+  'crisis in',
+  'protest',
+  'protests',
+  
+  // ===== CRYPTO & WEB3 =====
+  'crypto news',
+  'bitcoin price',
+  'eth price',
+  'token price',
+  'rug pull',
+  'airdrop',
+  'mint',
+  'floor price',
+  'nft drop',
+  'defi',
+  'web3 news',
+  'blockchain',
+  
+  // ===== SPORTS & EVENTS =====
   'game tonight',
   'match today',
   'score',
+  'final score',
   'who won',
   'who is winning',
   'playoff',
+  'playoffs',
   'championship',
   'nba game',
   'nfl game',
+  'mlb game',
+  'premier league',
+  'champions league',
+  'world cup',
+  'super bowl',
+  'f1 race',
+  'formula 1',
   'next game',
   'last game',
   'when is',
   'what time',
   'schedule',
-  // Sports stats
+  'injury update',
+  'trade rumor',
+  'free agent',
+  'draft',
+  
+  // ===== SPORTS STATS =====
   'stats',
   'statistics',
   'points',
@@ -530,15 +633,62 @@ const KNOWLEDGE_QUERY_KEYWORDS = [
   'how did',
   'performance',
   'box score',
-  // News/information
-  'news about',
-  'update on',
-  'what happened',
-  'breaking',
-  // Real-time queries
+  'season stats',
+  'career stats',
+  'averages',
+  'ppg',
+  'rpg',
+  'apg',
+  
+  // ===== ENTERTAINMENT =====
+  'movie release',
+  'album drop',
+  'new song',
+  'new album',
+  'concert',
+  'tour dates',
+  'awards show',
+  'grammy',
+  'oscar',
+  'emmy',
+  'box office',
+  'streaming',
+  'netflix',
+  'disney',
+  'anime',
+  'game release',
+  'launch date',
+  
+  // ===== TECH & AI =====
+  'tech news',
+  'ai news',
+  'openai',
+  'chatgpt',
+  'grok',
+  'claude',
+  'gemini',
+  'apple',
+  'google',
+  'microsoft',
+  'meta',
+  'elon',
+  'new feature',
+  'product launch',
+  'update',
+  
+  // ===== FINANCIAL =====
   'weather',
   'stock price',
   'market',
+  'stocks',
+  'dow',
+  'nasdaq',
+  's&p',
+  'interest rate',
+  'fed',
+  'inflation',
+  'earnings',
+  'ipo',
 ];
 
 /**
@@ -1432,13 +1582,13 @@ export async function generateResponse(
   const styleSeed = buildStyleSeed(characterCard, personalityMetadata) ^ stableHash(userMessage);
 
   // Auto-detect if query needs live search (real-time Twitter/web data)
-  // Logic: 
-  // 1. If advancedSettings.enableLiveSearch is FALSE, never use live search
-  // 2. If advancedSettings.enableLiveSearch is TRUE (or undefined), auto-detect based on keywords
-  // 3. If enableLiveSearch is explicitly passed as TRUE, always use it
-  const userWantsLiveSearch = advancedSettings?.enableLiveSearch !== false; // Default to true
+  // Logic:
+  // 1. If either advancedSettings.enableLiveSearch or enableLiveSearch is FALSE, never use it
+  // 2. Otherwise, only enable when detectKnowledgeQuery returns true
+  const allowLiveSearch =
+    advancedSettings?.enableLiveSearch !== false && enableLiveSearch !== false;
   const queryNeedsLiveSearch = detectKnowledgeQuery(userMessage);
-  const needsLiveSearch = enableLiveSearch === true || (userWantsLiveSearch && queryNeedsLiveSearch);
+  const needsLiveSearch = allowLiveSearch && queryNeedsLiveSearch;
   
   if (needsLiveSearch) {
     console.log(`🔍 Knowledge query detected: "${userMessage.substring(0, 50)}..." - enabling live search`);
@@ -1485,7 +1635,7 @@ YOUR TASK: Write a reply ${username ? `to @${username}` : ''} that:
   const model = 'grok-3-latest'; // Use latest for both (was grok-3-mini for Twitter)
   // For live search queries, we need MORE tokens to include actual data (stats, scores, etc.)
   // For regular chat, keep it brief
-  const maxTokens = needsLiveSearch ? 300 : (mode === 'chat' ? 150 : 150);
+  const maxTokens = needsLiveSearch ? 200 : (mode === 'chat' ? 120 : 90);
   
   // Adjust temperature based on creativity level
   let temperature = 0.85; // Default balanced

@@ -823,7 +823,7 @@ export function ConsoleLogs({ isOpen, onClose, userId, twitterAccessToken }: Con
                             <Zap className="w-4 h-4 text-green-400 mt-0.5" />
                             <div>
                               <h5 className="text-white text-sm font-medium">Live Search</h5>
-                              <p className="text-white/40 text-xs">Auto-fetch current info for trending topics</p>
+                              <p className="text-white/40 text-xs">Auto-fetch news, trends, & social sentiment</p>
                             </div>
                           </div>
                           <button

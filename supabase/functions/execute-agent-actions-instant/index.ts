@@ -322,15 +322,15 @@ async function generateMentionReply(
       personalityMetadata, // NOW PASSED: Same personality enhancement as chat
       suggestedAngle: undefined,
       recentResponses,
-      minLength: 70, // More flexible range to avoid templated replies
-      maxLength: 220,
+      minLength: 40, // Shorter replies to reduce tokens and costs
+      maxLength: 140,
       enforceOneSentence: false, // Twitter replies can be longer if needed
       mode: 'twitter',
       grokApiKey: GROK_API_KEY,
       targetUsername, // Pass actual username for proper mentions
       emojiMode,
       advancedSettings, // NOW PASSED: Universal advanced settings for Twitter replies
-      enableLiveSearch: true, // Enable live search for intelligent, knowledge-backed replies
+      enableLiveSearch: undefined, // Only enable if detectKnowledgeQuery triggers
     });
 
     if (!result) {

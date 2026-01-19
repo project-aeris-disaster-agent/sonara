@@ -118,7 +118,7 @@ export async function checkLLMConnectivity(): Promise<{
     const edgeFunctionUrl = `${baseUrl}/functions/v1/chat-with-clone`;
     const anonKey = getSupabaseAnonKey();
     
-    // Make a minimal test request (this will fail gracefully if Grok API is not configured)
+    // Make a minimal test request (dry run to avoid Grok usage)
     const response = await fetch(edgeFunctionUrl, {
       method: 'POST',
       headers: {
@@ -126,21 +126,13 @@ export async function checkLLMConnectivity(): Promise<{
         'Authorization': `Bearer ${anonKey || ''}`,
       },
       body: JSON.stringify({
-        user_id: 'test',
-        session_id: 'test',
-        message: 'test',
-        character_card: {
-          name: 'Test',
-          bio: ['Test bio'],
-        },
+        dry_run: true,
       }),
     });
 
-    // If we get a 500 with "GROK_API_KEY not configured", LLM is unavailable
-    // If we get any other response (even 400/401), it means the service is available
     const data = await response.json().catch(() => ({}));
-    
-    if (data.error && data.error.includes('GROK_API_KEY')) {
+
+    if (data.grok_configured === false) {
       llmConnectivityCache = {
         status: 'unavailable',
         lastChecked: now,
