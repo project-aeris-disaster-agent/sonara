@@ -840,51 +840,6 @@ export function ConsoleLogs({ isOpen, onClose, userId, twitterAccessToken }: Con
                         </div>
                       </div>
 
-                      {/* Opening Variety Slider */}
-                      <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                        <div className="flex items-center justify-between mb-2">
-                          <h5 className="text-white text-sm font-medium">Opening Variety</h5>
-                          <span className="text-indigo-400 text-xs font-medium">{advancedSettings.openingVariety}%</span>
-                        </div>
-                        <p className="text-white/40 text-xs mb-2">How much to vary reply openers</p>
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          step="10"
-                          value={advancedSettings.openingVariety}
-                          onChange={(e) => handleUpdateAdvancedSetting('openingVariety', parseInt(e.target.value))}
-                          disabled={isLoadingSettings}
-                          className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-                        />
-                        <div className="flex justify-between text-white/30 text-xs mt-1">
-                          <span>Repeat</span>
-                          <span>Varied</span>
-                        </div>
-                      </div>
-
-                      {/* Anti-Slop Strictness Slider */}
-                      <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                        <div className="flex items-center justify-between mb-2">
-                          <h5 className="text-white text-sm font-medium">Anti-Slop Strictness</h5>
-                          <span className="text-rose-400 text-xs font-medium">{advancedSettings.antiSlopStrictness}%</span>
-                        </div>
-                        <p className="text-white/40 text-xs mb-2">How aggressively to reject banned phrases</p>
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          step="10"
-                          value={advancedSettings.antiSlopStrictness}
-                          onChange={(e) => handleUpdateAdvancedSetting('antiSlopStrictness', parseInt(e.target.value))}
-                          disabled={isLoadingSettings}
-                          className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-rose-500"
-                        />
-                        <div className="flex justify-between text-white/30 text-xs mt-1">
-                          <span>Loose</span>
-                          <span>Strict</span>
-                        </div>
-                      </div>
                     </div>
 
                     {/* Expression Intensity Section */}

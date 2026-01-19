@@ -175,6 +175,7 @@ export function CharacterCardModal({
     style: true,
     topics: false,
     examples: false,
+    messageExamples: false,
     agent: false,
   });
   const [twitterProfile, setTwitterProfile] = useState<TwitterProfileData | null>(
@@ -207,6 +208,8 @@ export function CharacterCardModal({
   const [newAdjectiveInput, setNewAdjectiveInput] = useState('');
   const [newStyleInputs, setNewStyleInputs] = useState({ all: '', chat: '', post: '' });
   const [newPostExampleInput, setNewPostExampleInput] = useState('');
+  const [newMessageExampleUserInput, setNewMessageExampleUserInput] = useState('');
+  const [newMessageExampleAssistantInput, setNewMessageExampleAssistantInput] = useState('');
   
   // Agent settings state
   const [agentSettings, setAgentSettings] = useState<AgentSettings>(DEFAULT_AGENT_SETTINGS);
@@ -303,6 +306,8 @@ export function CharacterCardModal({
         setNewAdjectiveInput('');
         setNewStyleInputs({ all: '', chat: '', post: '' });
         setNewPostExampleInput('');
+        setNewMessageExampleUserInput('');
+        setNewMessageExampleAssistantInput('');
         setNewTargetAccountInput('');
       }, 300);
     }
@@ -528,6 +533,27 @@ export function CharacterCardModal({
   const removePostExample = (index: number) => {
     if (!editedCard || editedCard.postExamples.length <= 1) return;
     updateCardField('postExamples', editedCard.postExamples.filter((_, i) => i !== index));
+  };
+
+  const addMessageExample = () => {
+    if (!editedCard) return;
+    const userText = newMessageExampleUserInput.trim();
+    const assistantText = newMessageExampleAssistantInput.trim();
+    if (!userText || !assistantText) return;
+    const newExample = [
+      { user: '{{user1}}', content: { text: userText } },
+      { user: editedCard.name, content: { text: assistantText } },
+    ];
+    const currentExamples = editedCard.messageExamples || [];
+    updateCardField('messageExamples', [...currentExamples, newExample]);
+    setNewMessageExampleUserInput('');
+    setNewMessageExampleAssistantInput('');
+  };
+
+  const removeMessageExample = (index: number) => {
+    if (!editedCard) return;
+    const currentExamples = editedCard.messageExamples || [];
+    updateCardField('messageExamples', currentExamples.filter((_, i) => i !== index));
   };
 
   // Note: updateStyleField is available for future use when style editing is implemented
@@ -1181,6 +1207,95 @@ export function CharacterCardModal({
                               }}
                               disabled={!newPostExampleInput.trim()}
                               className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-400 text-sm hover:bg-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                              <Plus className="w-4 h-4" />
+                              Add Example
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Message Examples Section */}
+                <div className="rounded-xl bg-white/5 border border-white/10 overflow-hidden">
+                  <button
+                    onClick={() => toggleSection('messageExamples')}
+                    className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="w-4 h-4 text-blue-400" />
+                      <span className="text-white font-medium">Message Examples</span>
+                      <span className="text-white/40 text-xs">({(editedCard.messageExamples || []).length} examples)</span>
+                    </div>
+                    {expandedSections.messageExamples ? (
+                      <ChevronUp className="w-4 h-4 text-white/50" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-white/50" />
+                    )}
+                  </button>
+                  {expandedSections.messageExamples && (
+                    <div className="px-4 pb-4 space-y-2">
+                      <p className="text-white/40 text-xs mb-2">
+                        These examples teach your AI clone how to reply in conversations
+                      </p>
+
+                      {/* Message examples list */}
+                      {(editedCard.messageExamples || []).map((example, idx) => {
+                        const userEntry = example.find(m => m.user === '{{user1}}') ?? example[0];
+                        const assistantEntry = example.find(m => m.user !== '{{user1}}') ?? example[1];
+                        return (
+                          <div
+                            key={idx}
+                            className="relative group p-3 rounded-lg bg-white/5 border border-white/10 space-y-2"
+                          >
+                            <div>
+                              <p className="text-white/40 text-[10px] uppercase mb-1">User</p>
+                              <p className="text-white/70 text-sm">"{userEntry?.content?.text || ''}"</p>
+                            </div>
+                            <div>
+                              <p className="text-white/40 text-[10px] uppercase mb-1">Assistant</p>
+                              <p className="text-white/70 text-sm">"{assistantEntry?.content?.text || ''}"</p>
+                            </div>
+                            {state === 'editing' && (editedCard.messageExamples || []).length > 1 && (
+                              <button
+                                onClick={() => removeMessageExample(idx)}
+                                className="absolute top-2 right-2 p-1.5 rounded-lg bg-red-500/20 text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-500/40 transition-all"
+                                title="Remove example"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {/* Add new message example (only in edit mode) */}
+                      {state === 'editing' && (
+                        <div className="pt-2 space-y-2">
+                          <textarea
+                            value={newMessageExampleUserInput}
+                            onChange={(e) => setNewMessageExampleUserInput(e.target.value)}
+                            placeholder="User message example..."
+                            className="w-full bg-white/5 border border-white/20 rounded-lg px-3 py-2 text-white/80 text-sm focus:outline-none focus:border-blue-400/50 resize-none placeholder:text-white/30"
+                            rows={2}
+                          />
+                          <textarea
+                            value={newMessageExampleAssistantInput}
+                            onChange={(e) => setNewMessageExampleAssistantInput(e.target.value)}
+                            placeholder={`Your reply as ${editedCard.name}...`}
+                            className="w-full bg-white/5 border border-white/20 rounded-lg px-3 py-2 text-white/80 text-sm focus:outline-none focus:border-blue-400/50 resize-none placeholder:text-white/30"
+                            rows={2}
+                          />
+                          <div className="flex items-center justify-between">
+                            <span className="text-white/30 text-xs">
+                              {(newMessageExampleUserInput.length + newMessageExampleAssistantInput.length)}/560
+                            </span>
+                            <button
+                              onClick={addMessageExample}
+                              disabled={!newMessageExampleUserInput.trim() || !newMessageExampleAssistantInput.trim()}
+                              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-500/20 text-blue-400 text-sm hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
                               <Plus className="w-4 h-4" />
                               Add Example

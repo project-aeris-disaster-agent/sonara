@@ -106,27 +106,32 @@ function buildUnifiedPersonalityProfile(
   const communicationStyle = [...new Set(allTraits)].join(', '); // Dedupe
   
   // CROSS-POLLINATE voice examples: Both modes see conversation AND writing style
+  const maxExampleLength = 140; // Balance style fidelity with token cost
+  const maxConversationExamples = 4;
+  const maxPostExamples = 6;
+  const maxVoiceExamples = 6;
+
   const conversationExamples = card.messageExamples
-    .slice(0, 4)
+    .slice(0, maxConversationExamples)
     .map(convo => {
       const assistantMsg = convo.find(m => m.user !== '{{user1}}');
       if (assistantMsg?.content?.text) {
         const text = assistantMsg.content.text;
-        return text.length > 80 ? text.substring(0, 80) + '...' : text;
+        return text.length > maxExampleLength ? text.substring(0, maxExampleLength) + '...' : text;
       }
       return null;
     })
     .filter(Boolean);
   
-  const writingExamples = card.postExamples.slice(0, 3).map(ex => 
-    ex.length > 80 ? ex.substring(0, 80) + '...' : ex
+  const writingExamples = card.postExamples.slice(0, maxPostExamples).map(ex => 
+    ex.length > maxExampleLength ? ex.substring(0, maxExampleLength) + '...' : ex
   );
   
   // Combine voice examples (keeps token count low)
   const voiceExamples = [
-    ...conversationExamples.map(ex => `• "${ex}"`),
     ...writingExamples.map(ex => `• "${ex}"`),
-  ].slice(0, 4).join('\n'); // Max 4 examples total for efficiency
+    ...conversationExamples.map(ex => `• "${ex}"`),
+  ].slice(0, maxVoiceExamples).join('\n'); // Max 6 examples total for efficiency
   
   // Enhanced personality from metadata (BOTH modes now use this)
   let enhancedPersonality = '';
@@ -740,6 +745,40 @@ EMOJI RULES:
 }
 
 /**
+ * Build humor style prompt section
+ * Controls how much humor/playfulness comes through in responses
+ */
+function buildHumorPrompt(metadata?: PersonalityMetadata, advancedSettings?: AdvancedSettings): string {
+  const humorStyle = metadata?.humorStyle;
+  const intensity = advancedSettings?.humorIntensity ?? 50; // Default 50%
+  
+  // Skip if humor is disabled
+  if (intensity < 10) {
+    return `
+😐 HUMOR LEVEL: Minimal
+Keep responses straightforward and professional. Skip jokes and playful language.`;
+  }
+  
+  const level = intensity < 30 ? 'Low' : intensity < 60 ? 'Moderate' : intensity < 85 ? 'High' : 'Maximum';
+  const frequency = intensity < 30 ? 'rarely—maybe 1 in 5 responses' : 
+                    intensity < 60 ? 'sometimes—when it fits naturally' : 
+                    intensity < 85 ? 'often—humor is part of your style' :
+                    'frequently—you find humor in most things';
+  
+  let styleNote = '';
+  if (humorStyle) {
+    styleNote = `\nYour humor style: ${humorStyle}`;
+  }
+  
+  return `
+😂 HUMOR LEVEL: ${level} (${intensity}%)${styleNote}
+• Use humor ${frequency}
+• ${intensity >= 60 ? 'Playful teasing and wit are welcome' : 'Keep humor subtle and contextual'}
+• ${intensity >= 85 ? 'Sarcasm and irony are fair game' : 'Avoid heavy sarcasm unless it fits your character'}
+• Don't force jokes—only when they land naturally`;
+}
+
+/**
  * Build opinion style prompt section
  */
 function buildOpinionPrompt(metadata?: PersonalityMetadata, advancedSettings?: AdvancedSettings): string {
@@ -1087,6 +1126,7 @@ function buildChatSystemPrompt(
   const signaturePrompt = buildSignaturePhrasePrompt(signatureInjection, advancedSettings);
   const emojiPrompt = buildEmojiPrompt(metadata, advancedSettings);
   const opinionPrompt = buildOpinionPrompt(metadata, advancedSettings);
+  const humorPrompt = buildHumorPrompt(metadata, advancedSettings);
   
   // Emoji mode override
   if (emojiMode) {
@@ -1114,6 +1154,7 @@ STRICT RULES:
 ${signaturePrompt}
 ${emojiPrompt}
 ${opinionPrompt}
+${humorPrompt}
 ${moodSection}
 ${knowledgeSection}
 ${antiFormalitySection}
@@ -1170,6 +1211,7 @@ function buildTwitterSystemPrompt(
   const signaturePrompt = buildSignaturePhrasePrompt(signatureInjection, advancedSettings);
   const emojiPrompt = buildEmojiPrompt(metadata, advancedSettings);
   const opinionPrompt = buildOpinionPrompt(metadata, advancedSettings);
+  const humorPrompt = buildHumorPrompt(metadata, advancedSettings);
   
   // Build explicit username instruction
   const usernameInstruction = targetUsername 
@@ -1223,6 +1265,7 @@ Choose your stance based on YOUR personality and archetype. Be authentic.` : '';
 ${signaturePrompt}
 ${emojiPrompt}
 ${opinionPrompt}
+${humorPrompt}
 ${usernameInstruction}
 ${antiFormalitySection}
 ${knowledgePrompt}
