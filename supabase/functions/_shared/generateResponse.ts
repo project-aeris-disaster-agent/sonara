@@ -2,6 +2,7 @@
 // UNIFIED BRAIN: Both chat and Twitter use the same personality core
 // Supports Grok's Twitter knowledge and web search capabilities for intelligent responses
 import { BANNED_PHRASES, buildBannedPhrasePatterns, buildAiSlopPatterns } from './bannedPhrases.ts';
+import { humanizeText } from './humanizer.ts';
 
 export interface CharacterCard {
   name: string;
@@ -442,6 +443,9 @@ export interface AdvancedSettings {
   humorIntensity: number;      // 0-100
   opinionStrength: 'soft' | 'normal' | 'strong';
   creativityLevel: 'consistent' | 'balanced' | 'creative';
+  // Humanizer settings - post-processing to remove AI writing patterns
+  enableHumanizer?: boolean;  // Enable humanizer post-processing (default: false)
+  humanizerStrictness?: 'light' | 'moderate' | 'strict';  // How aggressively to transform
 }
 
 export interface GenerateResponseOptions {
@@ -1885,6 +1889,23 @@ YOUR TASK: Write a reply ${username ? `to @${username}` : ''} that:
         }
       }
 
+      // ============================================================================
+      // HUMANIZER POST-PROCESSING (Enabled by default)
+      // Removes AI writing patterns while preserving personality
+      // Set advancedSettings.enableHumanizer = false to disable
+      // ============================================================================
+      if (advancedSettings?.enableHumanizer !== false) {
+        const humanizerStrictness = advancedSettings?.humanizerStrictness || 'moderate';
+        const beforeHumanize = assistantMessage;
+        assistantMessage = humanizeText(assistantMessage, {
+          strictness: humanizerStrictness,
+          preservePersonality: true,  // Don't over-transform short responses
+        });
+        if (beforeHumanize !== assistantMessage) {
+          console.log(`🧹 Humanizer applied (${humanizerStrictness}): ${beforeHumanize.length} → ${assistantMessage.length} chars`);
+        }
+      }
+
       return {
         response: assistantMessage,
         tokens_used: data.usage?.total_tokens,
@@ -1922,6 +1943,16 @@ YOUR TASK: Write a reply ${username ? `to @${username}` : ''} that:
     } else if (maxLength && lastResponse.length > maxLength) {
       lastResponse = lastResponse.substring(0, maxLength - 3) + '...';
     }
+    
+    // Apply humanizer to fallback response as well (enabled by default)
+    if (advancedSettings?.enableHumanizer !== false) {
+      const humanizerStrictness = advancedSettings?.humanizerStrictness || 'moderate';
+      lastResponse = humanizeText(lastResponse, {
+        strictness: humanizerStrictness,
+        preservePersonality: true,
+      });
+    }
+    
     return { response: lastResponse, tokens_used: 0 };
   }
 
