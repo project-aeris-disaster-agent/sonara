@@ -6,6 +6,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { checkRateLimit, RATE_LIMITS, rateLimitResponse } from '../_shared/rateLimit.ts';
 import { generateResponse, type CharacterCard, type PersonalityMetadata, type ConversationMessage, type ConversationContext } from '../_shared/generateResponse.ts';
+import { getGlobalSettings, mergeGlobalWithUserSettings, isServicePaused } from '../_shared/globalSettings.ts';
 
 const SUPABASE_URL =
   Deno.env.get('PROJECT_URL') ??
@@ -97,29 +98,58 @@ serve(async (req) => {
     console.log(`History: ${conversation_history?.length || 0} messages`);
     console.log(`Has personality metadata: ${!!personality_metadata}`);
 
+    // Fetch global settings and check for maintenance mode
+    const supabaseAdmin = createSupabaseAdmin();
+    const globalSettings = await getGlobalSettings(supabaseAdmin);
+    
+    if (isServicePaused(globalSettings)) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'Service temporarily unavailable',
+          message: globalSettings?.maintenance_mode 
+            ? 'Service is under maintenance. Please try again later.'
+            : 'Agent processing is currently paused.'
+        }),
+        { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Fetch user preferences for emoji mode and advanced settings
     let emojiMode = false;
     let advancedSettings: any = undefined;
     try {
-      const supabaseAdmin = createSupabaseAdmin();
       const { data: profile } = await supabaseAdmin
         .from('profiles')
         .select('preferences')
         .eq('id', user_id)
         .single();
       
-      if (profile?.preferences?.emoji_mode === true) {
-        emojiMode = true;
-        console.log('🎭 Emoji mode enabled for user');
+      // Merge global settings with user preferences (user overrides global)
+      const userPreferences = profile?.preferences || {};
+      
+      // Emoji mode: user setting overrides global default
+      emojiMode = userPreferences.emoji_mode ?? globalSettings?.enable_emoji_mode ?? false;
+      if (emojiMode) {
+        console.log('🎭 Emoji mode enabled', userPreferences.emoji_mode ? '(user setting)' : '(global default)');
       }
       
-      if (profile?.preferences?.advanced_settings) {
-        advancedSettings = profile.preferences.advanced_settings;
-        console.log('⚙️ Advanced settings loaded:', Object.keys(advancedSettings).join(', '));
+      // Advanced settings: merge global defaults with user overrides
+      if (globalSettings) {
+        advancedSettings = mergeGlobalWithUserSettings(
+          globalSettings,
+          userPreferences.advanced_settings
+        );
+        console.log('⚙️ Advanced settings loaded (global defaults + user overrides):', Object.keys(advancedSettings).join(', '));
+      } else if (userPreferences.advanced_settings) {
+        advancedSettings = userPreferences.advanced_settings;
+        console.log('⚙️ Advanced settings loaded (user only):', Object.keys(advancedSettings).join(', '));
       }
     } catch (error) {
       console.error('Error fetching user preferences:', error);
-      // Continue with defaults if fetch fails
+      // Continue with global defaults if fetch fails
+      if (globalSettings) {
+        advancedSettings = mergeGlobalWithUserSettings(globalSettings, null);
+      }
     }
 
     // Extract recent assistant responses for repetition detection

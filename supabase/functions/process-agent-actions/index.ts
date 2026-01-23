@@ -6,6 +6,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { generateResponse, type CharacterCard, type PersonalityMetadata } from '../_shared/generateResponse.ts';
+import { getGlobalSettings, isServicePaused, getEffectiveAgentActions, getEffectiveFrequency, mergeGlobalWithUserSettings } from '../_shared/globalSettings.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -658,6 +659,7 @@ async function generateMentionReply(
   targetUsername: string,
   characterCard: CharacterCard,
   personalityMetadata: PersonalityMetadata | undefined,
+  globalSettings: any,
   accessToken?: string
 ): Promise<string | null> {
   if (!GROK_API_KEY) {
@@ -675,18 +677,29 @@ async function generateMentionReply(
       .eq('id', userId)
       .single();
     
-    if (profile?.preferences?.emoji_mode === true) {
-      emojiMode = true;
-      console.log('🎭 Emoji mode enabled for Twitter reply');
+    // Merge global settings with user preferences (user overrides global)
+    const userPreferences = profile?.preferences || {};
+    
+    // Emoji mode: user setting overrides global default
+    emojiMode = userPreferences.emoji_mode ?? globalSettings?.enable_emoji_mode ?? false;
+    if (emojiMode) {
+      console.log('🎭 Emoji mode enabled for Twitter reply', userPreferences.emoji_mode ? '(user setting)' : '(global default)');
     }
     
-    if (profile?.preferences?.advanced_settings) {
-      advancedSettings = profile.preferences.advanced_settings;
-      console.log('⚙️ Advanced settings loaded for Twitter reply:', Object.keys(advancedSettings).join(', '));
+    // Advanced settings: merge global defaults with user overrides
+    if (globalSettings) {
+      advancedSettings = mergeGlobalWithUserSettings(globalSettings, userPreferences.advanced_settings);
+      console.log('⚙️ Advanced settings loaded for Twitter reply (global defaults + user overrides):', Object.keys(advancedSettings).join(', '));
+    } else if (userPreferences.advanced_settings) {
+      advancedSettings = userPreferences.advanced_settings;
+      console.log('⚙️ Advanced settings loaded for Twitter reply (user only):', Object.keys(advancedSettings).join(', '));
     }
   } catch (error) {
     console.error('Error fetching user preferences:', error);
-    // Continue with defaults if fetch fails
+    // Continue with global defaults if fetch fails
+    if (globalSettings) {
+      advancedSettings = mergeGlobalWithUserSettings(globalSettings, null);
+    }
   }
 
   // Fetch thread context if available (limit to save API calls on free tier)
@@ -726,6 +739,7 @@ async function generateMentionReply(
       emojiMode,
       advancedSettings, // NOW PASSED: Universal advanced settings for Twitter replies
       enableLiveSearch: undefined, // Only enable if detectKnowledgeQuery triggers
+      tweetBeingRepliedTo: targetTweet.text, // Pass original tweet for anti-echo detection
     });
 
     if (!result) {
@@ -992,16 +1006,25 @@ async function scheduleAction(
  */
 async function processUserAgentActions(
   supabaseAdmin: SupabaseClient,
-  user: UserWithAgentSettings
+  user: UserWithAgentSettings,
+  globalSettings: any
 ): Promise<ProcessResult> {
   const settings = user.agent_settings;
   
+  // Merge global settings with user settings (user overrides global)
+  const effectiveActions = getEffectiveAgentActions(globalSettings, settings.actions);
+  const effectiveFrequency = getEffectiveFrequency(globalSettings, settings.frequency);
+  
   // Enhanced logging for debugging user processing
-  console.log(`[${user.id}] Processing: enabled=${settings.enabled}, lastRunAt=${settings.lastRunAt}, targets=${settings.targetAccounts.length}, actions=${JSON.stringify(settings.actions)}`);
+  console.log(`[${user.id}] Processing: enabled=${settings.enabled}, lastRunAt=${settings.lastRunAt}, targets=${settings.targetAccounts.length}, actions=${JSON.stringify(effectiveActions)}, frequency=${effectiveFrequency}`);
 
-  // Check if it's time to run
-  if (!shouldRunAgent(settings)) {
-    console.log(`[${user.id}] Skipped: Not time to run (lastRunAt=${settings.lastRunAt}, frequency=${settings.frequency})`);
+  // Check if it's time to run (use effective frequency)
+  const effectiveSettings = {
+    ...settings,
+    frequency: effectiveFrequency,
+  };
+  if (!shouldRunAgent(effectiveSettings)) {
+    console.log(`[${user.id}] Skipped: Not time to run (lastRunAt=${settings.lastRunAt}, frequency=${effectiveFrequency})`);
     return {
       userId: user.id,
       status: 'skipped',
@@ -1020,8 +1043,8 @@ async function processUserAgentActions(
     };
   }
 
-  // Check if any actions are enabled
-  if (!settings.actions.retweet && !settings.actions.like && !settings.actions.mention) {
+  // Check if any actions are enabled (use effective actions)
+  if (!effectiveActions.retweet && !effectiveActions.like && !effectiveActions.mention) {
     return {
       userId: user.id,
       status: 'skipped',
@@ -1052,7 +1075,7 @@ async function processUserAgentActions(
     // Get character card and personality metadata from pre-fetched data (optimized query)
     let characterCard: CharacterCard | null = null;
     let personalityMetadata: PersonalityMetadata | undefined = undefined;
-    if (settings.actions.mention) {
+    if (effectiveActions.mention) {
       // Character cards are already fetched in the main query
       const cardData = (user as any).character_cards?.find((card: any) => card.is_active);
       if (cardData?.card_data) {
@@ -1089,7 +1112,7 @@ async function processUserAgentActions(
 
     let totalActionsScheduled = 0;
     const baseScheduleTime = calculateRandomizedScheduleTime(
-      settings.frequency,
+      effectiveFrequency,
       null,
       settings.scheduling
     );
@@ -1108,7 +1131,7 @@ async function processUserAgentActions(
     // Process each target account
     for (const targetAccount of targetAccountsToProcess) {
       const targetUsername = getTargetUsername(targetAccount);
-      const accountActions = getAccountActions(targetAccount, settings.actions);
+      const accountActions = getAccountActions(targetAccount, effectiveActions);
       // Get target user ID (cached when possible)
       let targetUserId = getCachedTargetUserId(targetIdCache, targetUsername);
       if (!targetUserId) {
@@ -1286,6 +1309,7 @@ async function processUserAgentActions(
               targetUsername,
               characterCard as CharacterCard,
               personalityMetadata,
+              globalSettings,
               accessToken
             );
 
@@ -1413,6 +1437,28 @@ serve(async (req) => {
   try {
     const supabaseAdmin = createSupabaseAdmin();
 
+    // Fetch global settings and check for pause/maintenance
+    const globalSettings = await getGlobalSettings(supabaseAdmin);
+    
+    if (isServicePaused(globalSettings)) {
+      const message = globalSettings?.maintenance_mode 
+        ? 'Agent processing paused: Service is under maintenance'
+        : 'Agent processing paused: All agents are paused globally';
+      
+      console.log(message);
+      return new Response(
+        JSON.stringify({ 
+          processed: 0, 
+          skipped: 0,
+          failed: 0,
+          totalActionsScheduled: 0,
+          message,
+          results: []
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Check for manual trigger (single user processing)
     let body: { userId?: string } = {};
     try {
@@ -1444,7 +1490,7 @@ serve(async (req) => {
         );
       }
 
-      const result = await processUserAgentActions(supabaseAdmin, user as UserWithAgentSettings);
+      const result = await processUserAgentActions(supabaseAdmin, user as UserWithAgentSettings, globalSettings);
       return new Response(
         JSON.stringify({
           processed: result.status === 'processed' ? 1 : 0,
@@ -1501,7 +1547,7 @@ serve(async (req) => {
       const batchResults = await Promise.all(
         batch.map(async (user) => {
           console.log(`Processing user ${user.id}...`);
-          const result = await processUserAgentActions(supabaseAdmin, user);
+          const result = await processUserAgentActions(supabaseAdmin, user, globalSettings);
           console.log(`User ${user.id} result: ${result.status}, actions: ${result.actionsScheduled}`);
           return result;
         })

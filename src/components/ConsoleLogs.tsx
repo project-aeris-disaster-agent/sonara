@@ -26,6 +26,7 @@ import {
   MessageCircle,
   Sparkles,
   Zap,
+  Wand2,
 } from 'lucide-react';
 import type { ScheduledPostType } from '@/types/database';
 import { useScheduledTasks } from '@/hooks/useScheduledTasks';
@@ -1042,6 +1043,63 @@ export function ConsoleLogs({ isOpen, onClose, userId, twitterAccessToken }: Con
                           <span>Same openers</span>
                           <span>Varied openers</span>
                         </div>
+                      </div>
+
+                      {/* Humanizer Toggle */}
+                      <div className="p-4 rounded-xl bg-gradient-to-br from-cyan-500/10 to-purple-500/10 border border-cyan-500/20">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-start gap-3">
+                            <Wand2 className="w-4 h-4 text-cyan-400 mt-0.5" />
+                            <div>
+                              <h5 className="text-white text-sm font-medium">Humanizer</h5>
+                              <p className="text-white/40 text-xs">Post-process responses to remove AI writing patterns</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleUpdateAdvancedSetting('enableHumanizer', !advancedSettings.enableHumanizer)}
+                            disabled={isLoadingSettings}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                              advancedSettings.enableHumanizer ? 'bg-cyan-500' : 'bg-white/10'
+                            }`}
+                          >
+                            <span className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+                              advancedSettings.enableHumanizer ? 'translate-x-6' : 'translate-x-1'
+                            }`} />
+                          </button>
+                        </div>
+                        
+                        {/* Humanizer Strictness - only shown when humanizer is enabled */}
+                        {advancedSettings.enableHumanizer && (
+                          <div className="mt-3 pt-3 border-t border-white/10">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-white/60 text-xs">Strictness</span>
+                              <span className="text-cyan-400 text-xs font-medium capitalize">
+                                {advancedSettings.humanizerStrictness}
+                              </span>
+                            </div>
+                            <div className="flex gap-1">
+                              {(['light', 'moderate', 'strict'] as const).map(opt => (
+                                <button
+                                  key={opt}
+                                  onClick={() => handleUpdateAdvancedSetting('humanizerStrictness', opt)}
+                                  disabled={isLoadingSettings}
+                                  className={`flex-1 px-2 py-1.5 rounded text-xs transition-colors ${
+                                    advancedSettings.humanizerStrictness === opt
+                                      ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                                      : 'bg-white/5 text-white/50 hover:bg-white/10 border border-transparent'
+                                  }`}
+                                >
+                                  {opt.charAt(0).toUpperCase() + opt.slice(1)}
+                                </button>
+                              ))}
+                            </div>
+                            <p className="text-white/30 text-xs mt-2">
+                              {advancedSettings.humanizerStrictness === 'light' && 'Removes only obvious AI patterns (chatbot phrases, sycophantic tone)'}
+                              {advancedSettings.humanizerStrictness === 'moderate' && 'Balanced cleanup of AI vocabulary and patterns'}
+                              {advancedSettings.humanizerStrictness === 'strict' && 'Aggressively removes all detected AI patterns'}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
 

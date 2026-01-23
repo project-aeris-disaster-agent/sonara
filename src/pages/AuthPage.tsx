@@ -1,5 +1,6 @@
 import { NewAuthCard } from '../components/NewAuthCard';
 import { DitheringShader } from '@/components/ui/dithering-shader';
+import newFronteraLogo from '@assets/Asset 20small.png';
 
 export function AuthPage() {
   const handleAuthSuccess = (userData: { email: string; name?: string }) => {
@@ -68,8 +69,8 @@ export function AuthPage() {
         <div className="mb-4 sm:mb-6 z-50 flex flex-col items-center justify-center">
           <p className="text-white/60 text-xs sm:text-sm mb-2">coming soon on</p>
           <img 
-            src="/Sandchain.png" 
-            alt="Sandchain Logo" 
+            src={newFronteraLogo} 
+            alt="New Frontera Corp Logo" 
             className="h-8 sm:h-10 md:h-12 w-auto mb-3 sm:mb-4"
           />
           {/* Footer Copyright */}

@@ -331,6 +331,7 @@ async function generateMentionReply(
       emojiMode,
       advancedSettings, // NOW PASSED: Universal advanced settings for Twitter replies
       enableLiveSearch: undefined, // Only enable if detectKnowledgeQuery triggers
+      tweetBeingRepliedTo: targetTweet.text, // Pass original tweet for anti-echo detection
     });
 
     if (!result) {

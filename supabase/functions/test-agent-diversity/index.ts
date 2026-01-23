@@ -274,7 +274,8 @@ serve(async (req) => {
           advancedSettings: testAdvancedSettings,
           enableLiveSearch: true,
           minLength: 70,
-          maxLength: 220
+          maxLength: 220,
+          tweetBeingRepliedTo: testTweet, // Pass original tweet for anti-echo detection
         });
 
         if (result?.response) {

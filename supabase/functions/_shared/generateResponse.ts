@@ -3,6 +3,7 @@
 // Supports Grok's Twitter knowledge and web search capabilities for intelligent responses
 import { BANNED_PHRASES, buildBannedPhrasePatterns, buildAiSlopPatterns } from './bannedPhrases.ts';
 import { humanizeText } from './humanizer.ts';
+import { extractEchoablePhrases, detectEchoSlop, buildAntiEchoPrompt } from './antiEcho.ts';
 
 export interface CharacterCard {
   name: string;
@@ -468,6 +469,7 @@ export interface GenerateResponseOptions {
   conversationContext?: ConversationContext; // Persistent context for mood/topic awareness
   allowTangents?: boolean; // Default true for chat, false for twitter
   advancedSettings?: AdvancedSettings; // Fine-tuning knobs for personality expression
+  tweetBeingRepliedTo?: string; // Original tweet text (for anti-echo detection in Twitter mode)
 }
 
 // ============================================================================
@@ -1352,7 +1354,8 @@ function buildTwitterSystemPrompt(
   emojiMode: boolean = false,
   advancedSettings?: AdvancedSettings,
   needsLiveSearch: boolean = false,
-  userMessage?: string
+  userMessage?: string,
+  tweetBeingRepliedTo?: string
 ): string {
   // Use unified personality profile (SAME brain as chat)
   const profile = buildUnifiedPersonalityProfile(card, metadata);
@@ -1395,6 +1398,10 @@ ${antiRepetitionSection}`;
   const antiFormalitySection = buildAntiFormalityPrompt();
   const knowledgePrompt = buildKnowledgeCapabilitiesPrompt(needsLiveSearch);
   const openingVarietyPrompt = buildOpeningVarietyPrompt(advancedSettings);
+  
+  // Extract echoable phrases from the original tweet and build anti-echo prompt
+  const echoablePhrases = tweetBeingRepliedTo ? extractEchoablePhrases(tweetBeingRepliedTo) : [];
+  const antiEchoPrompt = echoablePhrases.length > 0 ? buildAntiEchoPrompt(echoablePhrases) : '';
 
   // Detect if this is a hot take/provocative tweet
   const isHotTake = userMessage.toLowerCase().includes('hot take') || 
@@ -1458,6 +1465,14 @@ REPLY QUALITY:
 - Add VALUE - don't just agree or react emotionally
 - Be engaging but not spammy
 - Use your expertise to provide insights, not just validation
+
+NEVER ECHO THE TWEET:
+- DO NOT repeat key phrases from the tweet you're replying to verbatim
+- Paraphrase, reframe, or take a different angle entirely
+- If they say "X is Y", don't respond "yeah X is Y" - add something NEW
+- Challenge assumptions, ask questions, or share a different perspective
+- Focus on a specific detail they mentioned, not the whole thesis
+${antiEchoPrompt}
 
 BAD EXAMPLES (DO NOT DO THIS):
 - "Yo @user, that hunter/hunted vibe is pure F1 chaos!"
@@ -1581,6 +1596,7 @@ export async function generateResponse(
     emojiMode = false,
     conversationContext,
     advancedSettings,
+    tweetBeingRepliedTo,
   } = options;
 
   const styleSeed = buildStyleSeed(characterCard, personalityMetadata) ^ stableHash(userMessage);
@@ -1602,10 +1618,13 @@ export async function generateResponse(
     console.log('🎭 Emoji mode enabled - enforcing emoji-only responses');
   }
 
+  // Extract echoable phrases for anti-echo detection (used in retry loop)
+  const echoablePhrases = tweetBeingRepliedTo ? extractEchoablePhrases(tweetBeingRepliedTo) : [];
+  
   // Build system prompt based on mode (BOTH use unified personality core)
   const systemPrompt = mode === 'chat'
     ? buildChatSystemPrompt(characterCard, personalityMetadata, recentResponses, needsLiveSearch, emojiMode, conversationContext, userMessage, advancedSettings)
-    : buildTwitterSystemPrompt(characterCard, personalityMetadata, recentResponses, context, targetUsername, emojiMode, advancedSettings, needsLiveSearch, userMessage);
+    : buildTwitterSystemPrompt(characterCard, personalityMetadata, recentResponses, context, targetUsername, emojiMode, advancedSettings, needsLiveSearch, userMessage, tweetBeingRepliedTo);
 
   // Build user prompt
   const username = targetUsername || '';
@@ -1835,6 +1854,21 @@ YOUR TASK: Write a reply ${username ? `to @${username}` : ''} that:
         if (similarity > 0.7) {
           console.log(`Response too similar (${similarity.toFixed(2)}), regenerating with higher temperature...`);
           currentTemperature = Math.min(0.95, currentTemperature + 0.1);
+          lastResponse = assistantMessage;
+          continue; // Retry with higher temperature
+        }
+      }
+
+      // Check for echo slop (Twitter mode only) - detect if response echoes original tweet
+      if (!emojiMode && mode === 'twitter' && tweetBeingRepliedTo && attempt < maxRetries) {
+        const echoCheck = detectEchoSlop(assistantMessage, tweetBeingRepliedTo, echoablePhrases);
+        if (echoCheck.isEcho) {
+          console.log(`🚫 Echo detected: ${echoCheck.reason}`);
+          if (echoCheck.matchedPhrases && echoCheck.matchedPhrases.length > 0) {
+            console.log(`   Matched phrases: ${echoCheck.matchedPhrases.slice(0, 3).join(', ')}`);
+          }
+          console.log(`   Regenerating with higher temperature and explicit anti-echo instruction...`);
+          currentTemperature = Math.min(1.0, currentTemperature + 0.2); // Higher boost for echo
           lastResponse = assistantMessage;
           continue; // Retry with higher temperature
         }

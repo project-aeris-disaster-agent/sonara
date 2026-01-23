@@ -39,6 +39,7 @@ import {
 import { AutomationDropdown } from '@/components/AutomationDropdown';
 import { GoogleCalendarWidget } from '@/components/GoogleCalendarWidget';
 import { ConsoleLogs } from '@/components/ConsoleLogs';
+import newFronteraLogo from '@assets/Asset 20small.png';
 
 interface Message {
   id: string;
@@ -1066,7 +1067,7 @@ export function HomePage() {
       <footer className="fixed bottom-0 left-0 right-0 z-40 px-3 sm:px-4 py-2.5 sm:py-3 border-t border-white/5 bg-black/60 backdrop-blur-md">
         <div className="flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 md:gap-4">
           <p className="text-white/40 text-[10px] sm:text-xs">coming soon on</p>
-          <img src="/Sandchain.png" alt="Sandchain Logo" className="h-5 sm:h-6 md:h-8 w-auto" />
+          <img src={newFronteraLogo} alt="New Frontera Corp Logo" className="h-5 sm:h-6 md:h-8 w-auto" />
           <p className="text-white/30 text-[9px] sm:text-[10px] md:text-xs">
             New Prontera Corp. 2025™ All Rights Reserved
           </p>

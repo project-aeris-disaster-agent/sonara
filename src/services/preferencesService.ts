@@ -25,6 +25,10 @@ export interface AdvancedSettings {
   
   // Creativity
   creativityLevel: 'consistent' | 'balanced' | 'creative';
+  
+  // Humanizer settings - post-processing to remove AI writing patterns
+  enableHumanizer: boolean;  // Enable humanizer post-processing (default: true)
+  humanizerStrictness: 'light' | 'moderate' | 'strict';  // How aggressively to transform
 }
 
 export const DEFAULT_ADVANCED_SETTINGS: AdvancedSettings = {
@@ -38,6 +42,8 @@ export const DEFAULT_ADVANCED_SETTINGS: AdvancedSettings = {
   humorIntensity: 50,
   opinionStrength: 'normal',
   creativityLevel: 'balanced',
+  enableHumanizer: true,        // Enabled by default - removes AI writing patterns
+  humanizerStrictness: 'moderate',
 };
 
 /**
